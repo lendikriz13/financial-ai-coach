@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import User, Transaction
+from app.db.models import User, Transaction, ConversationHistory
 from app.services.memory_service import MemoryService
 import json
 import os
@@ -38,7 +38,7 @@ async def send_telegram_message(chat_id: int, text: str):
 
 @router.post("/telegram")
 async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
-    """Process Telegram messages with AI financial coaching and memory"""
+    """Process Telegram messages with AI financial coaching, memory, and reset commands"""
     try:
         print("=== MEMORY-ENABLED WEBHOOK START ===")
         data = await request.json()
@@ -70,8 +70,57 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
             else:
                 print(f"✅ Found existing user: {user.first_name} (Business: {user.business_type or 'Unknown'})")
             
-            # Process with Claude AI for financial coaching
-            if user_text:
+            # Handle special commands first
+            if user_text.lower() in ['/reset', '/clear', '/restart']:
+                print("🔄 Memory reset command received")
+                try:
+                    # Clear conversation history
+                    deleted_count = db.query(ConversationHistory).filter(ConversationHistory.user_id == user.id).delete()
+                    
+                    # Reset user context fields
+                    user.conversation_summary = None
+                    user.business_context = None
+                    user.business_type = None
+                    user.last_interaction = datetime.utcnow()
+                    
+                    db.commit()
+                    
+                    response_text = f"Memory cleared! Deleted {deleted_count} conversation(s). Starting fresh as your business mentor."
+                    await send_telegram_message(chat_id, response_text)
+                    print(f"✅ Memory reset complete - cleared {deleted_count} conversations")
+                    return {"status": "success", "action": "memory_reset"}
+                    
+                except Exception as e:
+                    print(f"❌ Error during memory reset: {e}")
+                    db.rollback()
+                    await send_telegram_message(chat_id, "Sorry, there was an error clearing memory. Please try again.")
+                    return {"status": "error", "message": f"Memory reset failed: {str(e)}"}
+            
+            # Handle special info commands
+            elif user_text.lower() in ['/stats', '/info', '/status']:
+                print("📊 Stats command received")
+                try:
+                    stats = MemoryService.get_user_stats(db, user.id)
+                    business_info = f"Business: {user.business_type or 'Not detected'}"
+                    
+                    stats_text = f"**Your Financial Coach Stats:**\n" \
+                                f"• Total conversations: {stats['total_conversations']}\n" \
+                                f"• Recent conversations (7 days): {stats['recent_conversations']}\n" \
+                                f"• {business_info}\n" \
+                                f"• Last interaction: {user.last_interaction.strftime('%Y-%m-%d %H:%M') if user.last_interaction else 'Never'}\n\n" \
+                                f"Commands: /reset (clear memory), /stats (this info)"
+                    
+                    await send_telegram_message(chat_id, stats_text)
+                    print("✅ Stats sent successfully")
+                    return {"status": "success", "action": "stats_sent"}
+                    
+                except Exception as e:
+                    print(f"❌ Error getting stats: {e}")
+                    await send_telegram_message(chat_id, "Sorry, couldn't retrieve your stats right now.")
+                    return {"status": "error", "message": f"Stats error: {str(e)}"}
+            
+            # Process regular messages with Claude AI
+            elif user_text and not user_text.startswith('/'):
                 print("Processing with memory-enabled Claude AI...")
                 
                 # Validate API key first
@@ -171,11 +220,10 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
                         print(f"✅ Conversation stored (Type: {message_type}, ID: {conversation.id})")
                         
                         # Update conversation summary periodically
-                        total_conversations = db.query(User).filter(User.id == user.id).first()
-                        conversation_count = len(MemoryService.get_recent_conversations(db, user.id, 100))
+                        total_conversations = len(MemoryService.get_recent_conversations(db, user.id, 100))
                         
                         # Update summary every 5 conversations
-                        if conversation_count % 5 == 0:
+                        if total_conversations % 5 == 0:
                             MemoryService.update_conversation_summary(db, user)
                             print("✅ Updated conversation summary")
                     
@@ -183,6 +231,16 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
                     print(f"❌ General Claude API error: {e}")
                     await send_telegram_message(chat_id, "Sorry, I encountered an error processing your request. Please try again.")
                     return {"status": "error", "message": f"Claude API error: {str(e)}"}
+            
+            # Handle unknown commands
+            elif user_text.startswith('/'):
+                print(f"❓ Unknown command: {user_text}")
+                help_text = "**Available commands:**\n" \
+                           "• /reset - Clear conversation memory\n" \
+                           "• /stats - View conversation statistics\n\n" \
+                           "Just send a regular message to chat with your financial coach!"
+                await send_telegram_message(chat_id, help_text)
+                return {"status": "success", "action": "help_sent"}
         
         print("=== MEMORY-ENABLED WEBHOOK END ===")
         return {"status": "success"}
