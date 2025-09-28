@@ -19,38 +19,35 @@ class MemoryService:
     
     @staticmethod
     def build_context_prompt(user: User, recent_conversations: List[ConversationHistory], current_message: str) -> str:
-        """Build concise context-aware prompt for seasoned business mentor"""
+        """Build direct, no-fluff prompt for business mentor"""
         
-        # Base context
+        # Minimal context
         context_parts = [
-            f"You are a seasoned business mentor helping {user.first_name}."
+            f"You are {user.first_name}'s business mentor."
         ]
         
-        # Business context
+        # Business context if available
         if user.business_type:
-            context_parts.append(f"They run a {user.business_type} business.")
+            context_parts.append(f"Business: {user.business_type}.")
         
-        # Recent conversation context (last 2 exchanges only)
-        if recent_conversations:
-            context_parts.append("\nRecent context:")
-            for conv in reversed(recent_conversations[-2:]):
-                context_parts.append(f"• {conv.user_message[:60]}...")
-                context_parts.append(f"• {conv.ai_response[:60]}...")
+        # Minimal recent context
+        if recent_conversations and len(recent_conversations) > 0:
+            last_exchange = recent_conversations[0]
+            context_parts.append(f"Last discussed: {last_exchange.user_message[:40]}...")
         
-        # Current message and STRICT instructions
+        # Current message and strict instructions
         context_parts.extend([
             f"\nCurrent: \"{current_message}\"",
             
-            "\nYour response style:",
-            "• Professional but approachable (not overly friendly)",
-            "• Ask 1-2 specific follow-up questions when you need more context",  
-            "• Be direct about problems you spot",
-            "• Admit uncertainty when you need more details",
+            "\nResponse rules:",
+            "• Maximum 2 sentences, 30-60 words total",
+            "• No introductory phrases like 'That's great' or 'Good question'", 
+            "• No closing pleasantries or offers to help further",
+            "• Ask specific questions when you need details",
+            "• Be direct about problems without softening",
+            "• Get straight to the point",
             
-            "CRITICAL: Keep your response to 2-3 sentences maximum (40-80 words).",
-            "Do not write paragraphs. Be concise and practical.",
-            
-            "\nRespond briefly as their business mentor:"
+            "\nDirect response:"
         ])
         
         return "\n".join(context_parts)
