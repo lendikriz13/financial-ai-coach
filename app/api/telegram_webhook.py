@@ -7,6 +7,30 @@ import os
 import httpx
 from anthropic import Anthropic
 
+# === DEBUGGING BLOCK (add this temporarily) ===
+print("=== RAILWAY ENVIRONMENT DEBUG ===")
+try:
+    import anthropic
+    print(f"✓ Anthropic imported successfully")
+    print(f"✓ Anthropic version: {getattr(anthropic, '__version__', 'unknown')}")
+    
+    # Test client creation
+    test_client = Anthropic(api_key="test-key")
+    print(f"✓ Client created: {type(test_client)}")
+    print(f"✓ Has messages attr: {hasattr(test_client, 'messages')}")
+    
+    # Check your actual client
+    print(f"✓ Your client type: {type(anthropic_client)}")
+    print(f"✓ Your client has messages: {hasattr(anthropic_client, 'messages')}")
+    
+except Exception as e:
+    print(f"❌ Anthropic debug error: {e}")
+    import traceback
+    traceback.print_exc()
+
+print(f"✓ Environment vars loaded: TELEGRAM_BOT_TOKEN={TELEGRAM_BOT_TOKEN is not None}, ANTHROPIC_API_KEY={ANTHROPIC_API_KEY is not None}")
+print("=== END DEBUG ===")
+
 router = APIRouter()
 
 # Use environment variables (Railway will provide these)
@@ -101,3 +125,4 @@ Keep responses conversational, supportive, and under 200 words. Act like a knowl
         if 'chat_id' in locals():
             await send_telegram_message(chat_id, "Sorry, I encountered an error. Please try again.")
         return {"status": "error", "message": str(e)}
+
