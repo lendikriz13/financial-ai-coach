@@ -1,4 +1,5 @@
-# COMPLETE app/services/memory_service.py file with all methods
+# app/services/memory_service.py
+# COMPLETE FILE - Replace entire contents
 
 from sqlalchemy.orm import Session
 from app.db.models import User, ConversationHistory
@@ -16,45 +17,43 @@ class MemoryService:
                  .limit(limit)\
                  .all()
     
-# REPLACE build_context_prompt method in memory_service.py with this SHORTER version:
-
-@staticmethod
-def build_context_prompt(user: User, recent_conversations: List[ConversationHistory], current_message: str) -> str:
-    """Build concise context-aware prompt for seasoned business mentor"""
-    
-    # Base context
-    context_parts = [
-        f"You are a seasoned business mentor helping {user.first_name}."
-    ]
-    
-    # Business context
-    if user.business_type:
-        context_parts.append(f"They run a {user.business_type} business.")
-    
-    # Recent conversation context (last 2 exchanges only)
-    if recent_conversations:
-        context_parts.append("\nRecent context:")
-        for conv in reversed(recent_conversations[-2:]):
-            context_parts.append(f"• {conv.user_message[:60]}...")
-            context_parts.append(f"• {conv.ai_response[:60]}...")
-    
-    # Current message and STRICT instructions
-    context_parts.extend([
-        f"\nCurrent: \"{current_message}\"",
+    @staticmethod
+    def build_context_prompt(user: User, recent_conversations: List[ConversationHistory], current_message: str) -> str:
+        """Build concise context-aware prompt for seasoned business mentor"""
         
-        "\nYour response style:",
-        "• Professional but approachable (not overly friendly)",
-        "• Ask 1-2 specific follow-up questions when you need more context",  
-        "• Be direct about problems you spot",
-        "• Admit uncertainty when you need more details",
+        # Base context
+        context_parts = [
+            f"You are a seasoned business mentor helping {user.first_name}."
+        ]
         
-        "CRITICAL: Keep your response to 2-3 sentences maximum (40-80 words).",
-        "Do not write paragraphs. Be concise and practical.",
+        # Business context
+        if user.business_type:
+            context_parts.append(f"They run a {user.business_type} business.")
         
-        "\nRespond briefly as their business mentor:"
-    ])
-    
-    return "\n".join(context_parts)
+        # Recent conversation context (last 2 exchanges only)
+        if recent_conversations:
+            context_parts.append("\nRecent context:")
+            for conv in reversed(recent_conversations[-2:]):
+                context_parts.append(f"• {conv.user_message[:60]}...")
+                context_parts.append(f"• {conv.ai_response[:60]}...")
+        
+        # Current message and STRICT instructions
+        context_parts.extend([
+            f"\nCurrent: \"{current_message}\"",
+            
+            "\nYour response style:",
+            "• Professional but approachable (not overly friendly)",
+            "• Ask 1-2 specific follow-up questions when you need more context",  
+            "• Be direct about problems you spot",
+            "• Admit uncertainty when you need more details",
+            
+            "CRITICAL: Keep your response to 2-3 sentences maximum (40-80 words).",
+            "Do not write paragraphs. Be concise and practical.",
+            
+            "\nRespond briefly as their business mentor:"
+        ])
+        
+        return "\n".join(context_parts)
     
     @staticmethod
     def store_conversation(db: Session, user_id: int, user_message: str, ai_response: str, message_type: str = "general"):
@@ -72,7 +71,10 @@ def build_context_prompt(user: User, recent_conversations: List[ConversationHist
     
     @staticmethod
     def update_user_context(db: Session, user: User, user_message: str):
-        """Update user's business context and interaction timestamp - MISSING METHOD ADDED"""
+        """Update user's business context and interaction timestamp"""
+        print(f"DEBUG: update_user_context called with user_id: {user.id}")
+        
+        # Update last interaction time
         user.last_interaction = datetime.utcnow()
         
         # Auto-detect business type from early messages
@@ -94,10 +96,17 @@ def build_context_prompt(user: User, recent_conversations: List[ConversationHist
         
         # Extract and store business context from detailed messages
         if len(user_message) > 50 and not user.business_context:
-            # Store first substantial message as initial business context
             user.business_context = f"Initial context: {user_message[:200]}..."
+            print(f"✅ Stored initial business context")
         
-        db.commit()
+        # Commit changes
+        try:
+            db.commit()
+            print(f"✅ User context updated successfully")
+        except Exception as e:
+            print(f"❌ Error committing user context: {e}")
+            db.rollback()
+            raise
     
     @staticmethod
     def categorize_message_type(user_message: str) -> str:
@@ -122,7 +131,7 @@ def build_context_prompt(user: User, recent_conversations: List[ConversationHist
         """Update rolling conversation summary (call periodically)"""
         recent_convs = MemoryService.get_recent_conversations(db, user.id, 15)
         
-        if len(recent_convs) >= 3:  # Only summarize if there's meaningful conversation
+        if len(recent_convs) >= 3:
             # Analyze conversation patterns
             topic_counts = {}
             for conv in recent_convs:
@@ -151,3 +160,11 @@ def build_context_prompt(user: User, recent_conversations: List[ConversationHist
             'recent_conversations': recent_conversations,
             'user_id': user_id
         }
+
+# Test the class can be imported
+if __name__ == "__main__":
+    print("MemoryService class defined successfully")
+    print("Available methods:")
+    for method_name in dir(MemoryService):
+        if not method_name.startswith('_'):
+            print(f"  - {method_name}")
