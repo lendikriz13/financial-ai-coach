@@ -86,19 +86,39 @@ Provide helpful, encouraging financial advice. If they mention spending money, h
 Keep responses conversational, supportive, and under 200 words. Act like a knowledgeable financial mentor who understands small business challenges."""
                 
                 try:
-                    # Get AI response from Claude
-                    message_response = anthropic_client.messages.create(
-                        model="claude-3-sonnet-20240229",
-                        max_tokens=300,
-                        messages=[{"role": "user", "content": ai_prompt}]
-                    )
+                    # Alternative approach - use direct HTTP call to Claude API
+                    headers = {
+                        "Content-Type": "application/json",
+                        "x-api-key": ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01"
+                    }
                     
-                    ai_response = message_response.content[0].text
-                    print(f"Claude response: {ai_response}")
+                    payload = {
+                        "model": "claude-3-sonnet-20240229",
+                        "max_tokens": 300,
+                        "messages": [{"role": "user", "content": ai_prompt}]
+                    }
                     
-                    # Send response back to Telegram user
-                    await send_telegram_message(chat_id, ai_response)
-                    print("Response sent to user")
+                    async with httpx.AsyncClient() as client:
+                        response = await client.post(
+                            "https://api.anthropic.com/v1/messages",
+                            headers=headers,
+                            json=payload,
+                            timeout=30.0
+                        )
+                        
+                        if response.status_code == 200:
+                            response_data = response.json()
+                            ai_response = response_data["content"][0]["text"]
+                            print(f"Claude response: {ai_response}")
+                            
+                            # Send response back to Telegram user
+                            await send_telegram_message(chat_id, ai_response)
+                            print("Response sent to user")
+                        else:
+                            print(f"❌ Claude API HTTP error: {response.status_code} - {response.text}")
+                            await send_telegram_message(chat_id, "Sorry, AI service is temporarily unavailable.")
+                            return {"status": "error", "message": f"Claude API HTTP error: {response.status_code}"}
                     
                 except Exception as e:
                     print(f"❌ Claude API error: {e}")
