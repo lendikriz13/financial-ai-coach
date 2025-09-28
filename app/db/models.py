@@ -49,3 +49,17 @@ class ConversationHistory(Base):
     message_type = Column(String(50), nullable=True)  # question, expense, goal, analysis, etc.
     
     user = relationship("User", back_populates="conversation_history")
+
+class Goal(Base):
+    __tablename__ = "goals"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    target_amount = Column(String(50))
+    target_date = Column(DateTime)
+    status = Column(String(50), default="active")  # active, completed, paused
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
