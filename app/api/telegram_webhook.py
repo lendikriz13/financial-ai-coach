@@ -70,14 +70,11 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
             if user_text:
                 print("Processing with Claude AI...")
                 
-                # Initialize Anthropic client here (not globally)
-                try:
-                    anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
-                    print("✓ Anthropic client created successfully")
-                except Exception as e:
-                    print(f"❌ Failed to create Anthropic client: {e}")
-                    await send_telegram_message(chat_id, "Sorry, AI service temporarily unavailable. Please try again.")
-                    return {"status": "error", "message": "Anthropic client creation failed"}
+                # Validate API key first
+                if not ANTHROPIC_API_KEY or len(ANTHROPIC_API_KEY.strip()) < 10:
+                    print("❌ Invalid or missing Anthropic API key")
+                    await send_telegram_message(chat_id, "Sorry, AI service configuration error. Please contact support.")
+                    return {"status": "error", "message": "Invalid API key"}
                 
                 ai_prompt = f"""You are a helpful financial coach and business advisor for a clothing business owner. The user said: "{user_text}"
 
@@ -86,42 +83,72 @@ Provide helpful, encouraging financial advice. If they mention spending money, h
 Keep responses conversational, supportive, and under 200 words. Act like a knowledgeable financial mentor who understands small business challenges."""
                 
                 try:
-                    # Alternative approach - use direct HTTP call to Claude API
+                    # Use current Claude model names from 2024/2025
                     headers = {
                         "Content-Type": "application/json",
-                        "x-api-key": ANTHROPIC_API_KEY,
+                        "x-api-key": ANTHROPIC_API_KEY.strip(),
                         "anthropic-version": "2023-06-01"
                     }
                     
-                    payload = {
-                        "model": "claude-3-5-sonnet-20240620",
-                        "max_tokens": 300,
-                        "messages": [{"role": "user", "content": ai_prompt}]
-                    }
+                    # Try multiple model names in order of preference
+                    model_options = [
+                        "claude-3-5-sonnet-20241022",  # Latest Claude 3.5 Sonnet
+                        "claude-3-5-sonnet-20240620",  # Stable Claude 3.5 Sonnet 
+                        "claude-3-sonnet-20240229",    # Original Claude 3 Sonnet
+                        "claude-3-haiku-20240307"      # Fallback to Haiku
+                    ]
                     
-                    async with httpx.AsyncClient() as client:
-                        response = await client.post(
-                            "https://api.anthropic.com/v1/messages",
-                            headers=headers,
-                            json=payload,
-                            timeout=30.0
-                        )
-                        
-                        if response.status_code == 200:
-                            response_data = response.json()
-                            ai_response = response_data["content"][0]["text"]
-                            print(f"Claude response: {ai_response}")
+                    response_success = False
+                    
+                    for model_name in model_options:
+                        try:
+                            print(f"Trying model: {model_name}")
                             
-                            # Send response back to Telegram user
-                            await send_telegram_message(chat_id, ai_response)
-                            print("Response sent to user")
-                        else:
-                            print(f"❌ Claude API HTTP error: {response.status_code} - {response.text}")
-                            await send_telegram_message(chat_id, "Sorry, AI service is temporarily unavailable.")
-                            return {"status": "error", "message": f"Claude API HTTP error: {response.status_code}"}
+                            payload = {
+                                "model": model_name,
+                                "max_tokens": 300,
+                                "messages": [{"role": "user", "content": ai_prompt}]
+                            }
+                            
+                            async with httpx.AsyncClient(timeout=30.0) as client:
+                                response = await client.post(
+                                    "https://api.anthropic.com/v1/messages",
+                                    headers=headers,
+                                    json=payload
+                                )
+                                
+                                print(f"API Response Status: {response.status_code}")
+                                
+                                if response.status_code == 200:
+                                    response_data = response.json()
+                                    ai_response = response_data["content"][0]["text"]
+                                    print(f"✅ Claude response ({model_name}): {ai_response[:100]}...")
+                                    
+                                    # Send response back to Telegram user
+                                    await send_telegram_message(chat_id, ai_response)
+                                    print("Response sent to user")
+                                    response_success = True
+                                    break
+                                    
+                                elif response.status_code == 404:
+                                    print(f"❌ Model {model_name} not found, trying next...")
+                                    continue
+                                    
+                                else:
+                                    print(f"❌ API Error {response.status_code}: {response.text}")
+                                    continue
+                                    
+                        except Exception as model_error:
+                            print(f"❌ Error with model {model_name}: {model_error}")
+                            continue
+                    
+                    if not response_success:
+                        print("❌ All models failed")
+                        await send_telegram_message(chat_id, "Sorry, AI service is temporarily unavailable. Please try again later.")
+                        return {"status": "error", "message": "All Claude models failed"}
                     
                 except Exception as e:
-                    print(f"❌ Claude API error: {e}")
+                    print(f"❌ General Claude API error: {e}")
                     await send_telegram_message(chat_id, "Sorry, I encountered an error processing your request. Please try again.")
                     return {"status": "error", "message": f"Claude API error: {str(e)}"}
         
