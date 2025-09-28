@@ -2,10 +2,11 @@ from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import User, Transaction
+from app.services.memory_service import MemoryService
 import json
 import os
 import httpx
-from anthropic import Anthropic
+from datetime import datetime
 
 router = APIRouter()
 
@@ -37,9 +38,9 @@ async def send_telegram_message(chat_id: int, text: str):
 
 @router.post("/telegram")
 async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
-    """Process Telegram messages with AI financial coaching"""
+    """Process Telegram messages with AI financial coaching and memory"""
     try:
-        print("=== WEBHOOK PROCESSING START ===")
+        print("=== MEMORY-ENABLED WEBHOOK START ===")
         data = await request.json()
         print(f"Received data: {json.dumps(data, indent=2)}")
         
@@ -59,16 +60,19 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
                 user = User(
                     telegram_id=telegram_id,
                     first_name=first_name,
-                    username=message["from"].get("username")
+                    username=message["from"].get("username"),
+                    created_at=datetime.utcnow()
                 )
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-                print(f"Created new user: {user.first_name}")
+                print(f"✅ Created new user: {user.first_name}")
+            else:
+                print(f"✅ Found existing user: {user.first_name} (Business: {user.business_type or 'Unknown'})")
             
             # Process with Claude AI for financial coaching
             if user_text:
-                print("Processing with Claude AI...")
+                print("Processing with memory-enabled Claude AI...")
                 
                 # Validate API key first
                 if not ANTHROPIC_API_KEY or len(ANTHROPIC_API_KEY.strip()) < 10:
@@ -76,11 +80,17 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
                     await send_telegram_message(chat_id, "Sorry, AI service configuration error. Please contact support.")
                     return {"status": "error", "message": "Invalid API key"}
                 
-                ai_prompt = f"""You are a helpful financial coach and business advisor for a clothing business owner. The user said: "{user_text}"
-
-Provide helpful, encouraging financial advice. If they mention spending money, help them track expenses and categorize them as business or personal. If they ask about business calculations, help with breakeven analysis, profit margins, inventory planning, etc.
-
-Keep responses conversational, supportive, and under 200 words. Act like a knowledgeable financial mentor who understands small business challenges."""
+                # Update user context and interaction tracking
+                MemoryService.update_user_context(db, user, user_text)
+                print(f"✅ Updated user context (Business type: {user.business_type})")
+                
+                # Get recent conversation history
+                recent_conversations = MemoryService.get_recent_conversations(db, user.id, 8)
+                print(f"✅ Retrieved {len(recent_conversations)} recent conversations")
+                
+                # Build memory-aware prompt with conversation history
+                ai_prompt = MemoryService.build_context_prompt(user, recent_conversations, user_text)
+                print(f"✅ Built context-aware prompt (length: {len(ai_prompt)} chars)")
                 
                 try:
                     # Use current Claude model names from 2024/2025
@@ -99,6 +109,7 @@ Keep responses conversational, supportive, and under 200 words. Act like a knowl
                     ]
                     
                     response_success = False
+                    ai_response = ""
                     
                     for model_name in model_options:
                         try:
@@ -126,7 +137,7 @@ Keep responses conversational, supportive, and under 200 words. Act like a knowl
                                     
                                     # Send response back to Telegram user
                                     await send_telegram_message(chat_id, ai_response)
-                                    print("Response sent to user")
+                                    print("✅ Response sent to user")
                                     response_success = True
                                     break
                                     
@@ -147,12 +158,33 @@ Keep responses conversational, supportive, and under 200 words. Act like a knowl
                         await send_telegram_message(chat_id, "Sorry, AI service is temporarily unavailable. Please try again later.")
                         return {"status": "error", "message": "All Claude models failed"}
                     
+                    # Store the conversation in memory system
+                    if response_success and ai_response:
+                        message_type = MemoryService.categorize_message_type(user_text)
+                        conversation = MemoryService.store_conversation(
+                            db=db,
+                            user_id=user.id,
+                            user_message=user_text,
+                            ai_response=ai_response,
+                            message_type=message_type
+                        )
+                        print(f"✅ Conversation stored (Type: {message_type}, ID: {conversation.id})")
+                        
+                        # Update conversation summary periodically
+                        total_conversations = db.query(User).filter(User.id == user.id).first()
+                        conversation_count = len(MemoryService.get_recent_conversations(db, user.id, 100))
+                        
+                        # Update summary every 5 conversations
+                        if conversation_count % 5 == 0:
+                            MemoryService.update_conversation_summary(db, user)
+                            print("✅ Updated conversation summary")
+                    
                 except Exception as e:
                     print(f"❌ General Claude API error: {e}")
                     await send_telegram_message(chat_id, "Sorry, I encountered an error processing your request. Please try again.")
                     return {"status": "error", "message": f"Claude API error: {str(e)}"}
         
-        print("=== WEBHOOK PROCESSING END ===")
+        print("=== MEMORY-ENABLED WEBHOOK END ===")
         return {"status": "success"}
         
     except Exception as e:
