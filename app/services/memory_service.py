@@ -19,7 +19,7 @@ class MemoryService:
     
     @staticmethod
     def build_context_prompt(user: User, recent_conversations: List[ConversationHistory], current_message: str) -> str:
-        """Build CONSTRAINED seasoned business mentor prompt - RESPONSE FORMAT FOCUSED"""
+        """Build CONSTRAINED seasoned business mentor prompt - ENHANCED QUESTIONING"""
         
         # Minimal but essential context
         context_parts = [
@@ -38,15 +38,22 @@ class MemoryService:
         context_parts.extend([
             f"\nCurrent: \"{current_message}\"",
             
-            "\n*** CRITICAL RESPONSE CONSTRAINTS ***",
+            "\n*** RESPONSE CONSTRAINTS ***",
             "1. MAXIMUM 3 sentences (50-80 words total)",
-            "2. NO introductory phrases like 'let's dig into', 'that's great', 'good question'",
+            "2. NO intro phrases like 'let's dig into', 'that's great'",
             "3. NO closing offers like 'does this help?' or 'let me know'",
-            "4. Get straight to your advice or questions",
-            "5. Sound like an experienced mentor - confident but not verbose",
             
-            "\nYour response style: Warm but direct. Natural but concise. Skip the fluff.",
-            "\nRespond now in 3 sentences or less:"
+            "\n*** WHEN TO ASK FOLLOW-UP QUESTIONS ***",
+            "Ask specific questions when you need:",
+            "• Numbers (revenue, costs, margins, budget)",
+            "• Timeline details (when, how long, by what date)",
+            "• Context (what type, how many, what specifically)",
+            "• Comparison data (vs competitors, vs last year)",
+            
+            "\nExamples: 'What's your monthly revenue?' 'How much are you spending on materials?' 'What's your target timeline?'",
+            
+            "\nYour style: Experienced mentor who asks smart questions to give better advice.",
+            "\nRespond in 3 sentences or less:"
         ])
         
         return "\n".join(context_parts)
