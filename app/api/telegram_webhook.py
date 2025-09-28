@@ -7,30 +7,6 @@ import os
 import httpx
 from anthropic import Anthropic
 
-# === DEBUGGING BLOCK (add this temporarily) ===
-print("=== RAILWAY ENVIRONMENT DEBUG ===")
-try:
-    import anthropic
-    print(f"✓ Anthropic imported successfully")
-    print(f"✓ Anthropic version: {getattr(anthropic, '__version__', 'unknown')}")
-    
-    # Test client creation
-    test_client = Anthropic(api_key="test-key")
-    print(f"✓ Client created: {type(test_client)}")
-    print(f"✓ Has messages attr: {hasattr(test_client, 'messages')}")
-    
-    # Check your actual client
-    print(f"✓ Your client type: {type(anthropic_client)}")
-    print(f"✓ Your client has messages: {hasattr(anthropic_client, 'messages')}")
-    
-except Exception as e:
-    print(f"❌ Anthropic debug error: {e}")
-    import traceback
-    traceback.print_exc()
-
-print(f"✓ Environment vars loaded: TELEGRAM_BOT_TOKEN={TELEGRAM_BOT_TOKEN is not None}, ANTHROPIC_API_KEY={ANTHROPIC_API_KEY is not None}")
-print("=== END DEBUG ===")
-
 router = APIRouter()
 
 # Use environment variables (Railway will provide these)
@@ -39,9 +15,6 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 print(f"Bot token loaded: {TELEGRAM_BOT_TOKEN is not None}")
 print(f"Anthropic key loaded: {ANTHROPIC_API_KEY is not None}")
-
-# Initialize Anthropic client
-anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 async def send_telegram_message(chat_id: int, text: str):
     """Send message back to Telegram user"""
@@ -97,25 +70,40 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
             if user_text:
                 print("Processing with Claude AI...")
                 
+                # Initialize Anthropic client here (not globally)
+                try:
+                    anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+                    print("✓ Anthropic client created successfully")
+                except Exception as e:
+                    print(f"❌ Failed to create Anthropic client: {e}")
+                    await send_telegram_message(chat_id, "Sorry, AI service temporarily unavailable. Please try again.")
+                    return {"status": "error", "message": "Anthropic client creation failed"}
+                
                 ai_prompt = f"""You are a helpful financial coach and business advisor for a clothing business owner. The user said: "{user_text}"
 
 Provide helpful, encouraging financial advice. If they mention spending money, help them track expenses and categorize them as business or personal. If they ask about business calculations, help with breakeven analysis, profit margins, inventory planning, etc.
 
 Keep responses conversational, supportive, and under 200 words. Act like a knowledgeable financial mentor who understands small business challenges."""
                 
-                # Get AI response from Claude
-                message_response = anthropic_client.messages.create(
-                    model="claude-3-sonnet-20240229",
-                    max_tokens=300,
-                    messages=[{"role": "user", "content": ai_prompt}]
-                )
-                
-                ai_response = message_response.content[0].text
-                print(f"Claude response: {ai_response}")
-                
-                # Send response back to Telegram user
-                await send_telegram_message(chat_id, ai_response)
-                print("Response sent to user")
+                try:
+                    # Get AI response from Claude
+                    message_response = anthropic_client.messages.create(
+                        model="claude-3-sonnet-20240229",
+                        max_tokens=300,
+                        messages=[{"role": "user", "content": ai_prompt}]
+                    )
+                    
+                    ai_response = message_response.content[0].text
+                    print(f"Claude response: {ai_response}")
+                    
+                    # Send response back to Telegram user
+                    await send_telegram_message(chat_id, ai_response)
+                    print("Response sent to user")
+                    
+                except Exception as e:
+                    print(f"❌ Claude API error: {e}")
+                    await send_telegram_message(chat_id, "Sorry, I encountered an error processing your request. Please try again.")
+                    return {"status": "error", "message": f"Claude API error: {str(e)}"}
         
         print("=== WEBHOOK PROCESSING END ===")
         return {"status": "success"}
@@ -125,4 +113,3 @@ Keep responses conversational, supportive, and under 200 words. Act like a knowl
         if 'chat_id' in locals():
             await send_telegram_message(chat_id, "Sorry, I encountered an error. Please try again.")
         return {"status": "error", "message": str(e)}
-
