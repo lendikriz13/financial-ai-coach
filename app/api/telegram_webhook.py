@@ -94,7 +94,7 @@ Keep responses conversational, supportive, and under 200 words. Act like a knowl
                     }
                     
                     payload = {
-                        "model": "claude-3-5-sonnet-20241022",
+                        "model": "claude-3-5-sonnet-20240620",
                         "max_tokens": 300,
                         "messages": [{"role": "user", "content": ai_prompt}]
                     }
