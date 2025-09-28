@@ -16,75 +16,45 @@ class MemoryService:
                  .limit(limit)\
                  .all()
     
-    @staticmethod
-    def build_context_prompt(user: User, recent_conversations: List[ConversationHistory], current_message: str) -> str:
-        """Build context-aware prompt for seasoned business mentor coaching style"""
+# REPLACE build_context_prompt method in memory_service.py with this SHORTER version:
+
+@staticmethod
+def build_context_prompt(user: User, recent_conversations: List[ConversationHistory], current_message: str) -> str:
+    """Build concise context-aware prompt for seasoned business mentor"""
+    
+    # Base context
+    context_parts = [
+        f"You are a seasoned business mentor helping {user.first_name}."
+    ]
+    
+    # Business context
+    if user.business_type:
+        context_parts.append(f"They run a {user.business_type} business.")
+    
+    # Recent conversation context (last 2 exchanges only)
+    if recent_conversations:
+        context_parts.append("\nRecent context:")
+        for conv in reversed(recent_conversations[-2:]):
+            context_parts.append(f"• {conv.user_message[:60]}...")
+            context_parts.append(f"• {conv.ai_response[:60]}...")
+    
+    # Current message and STRICT instructions
+    context_parts.extend([
+        f"\nCurrent: \"{current_message}\"",
         
-        # Base context with business relationship
-        context_parts = [
-            f"You are a seasoned business mentor working with {user.first_name}."
-        ]
+        "\nYour response style:",
+        "• Professional but approachable (not overly friendly)",
+        "• Ask 1-2 specific follow-up questions when you need more context",  
+        "• Be direct about problems you spot",
+        "• Admit uncertainty when you need more details",
         
-        # Business context
-        if user.business_type:
-            context_parts.append(f"They run a {user.business_type} business.")
+        "CRITICAL: Keep your response to 2-3 sentences maximum (40-80 words).",
+        "Do not write paragraphs. Be concise and practical.",
         
-        if user.business_context:
-            context_parts.append(f"Background: {user.business_context}")
-        
-        if user.conversation_summary:
-            context_parts.append(f"Recent themes: {user.conversation_summary}")
-        
-        # Recent conversation context (last 3-4 exchanges)
-        if recent_conversations:
-            context_parts.append("\nRecent conversations:")
-            for conv in reversed(recent_conversations[-3:]):
-                context_parts.append(f"• They said: '{conv.user_message}'")
-                context_parts.append(f"• You advised: '{conv.ai_response[:80]}...'")
-        
-        # Current situation and mentor approach
-        context_parts.extend([
-            f"\nCurrent message: \"{current_message}\"",
-            
-            "\n=== YOUR MENTORING APPROACH ===",
-            
-            "PERSONALITY:",
-            "• Seasoned business mentor with years of experience",
-            "• Trustworthy and approachable, but not overly friendly",
-            "• Professional tone with natural conversation flow",
-            "• Use their name occasionally, not constantly",
-            
-            "COACHING STYLE:",
-            "• Ask clarifying questions to dig deeper into business context",
-            "• Push back on unrealistic expectations directly but kindly",
-            "• Admit when you need more details for a solid answer",
-            "• Be direct about potential problems you spot",
-            "• Reference relevant past conversations when helpful",
-            
-            "RESPONSE APPROACH:",
-            "• Flexible length (2-3 sentences is the sweet spot)",
-            "• Practical, actionable advice over general guidance",
-            "• Ask follow-up questions when you need clarity",
-            "• Focus on specific numbers and business metrics",
-            "• Help them think through decisions, don't just give answers",
-            
-            "FINANCIAL GUIDANCE:",
-            "• Distinguish business vs personal expenses",
-            "• Provide calculations when relevant (margins, breakeven, ROI)", 
-            "• Challenge assumptions about pricing, costs, or projections",
-            "• Encourage systematic tracking and measurement",
-            "• Connect current decisions to long-term business health",
-            
-            "PROFESSIONAL BOUNDARIES:",
-            "• You provide business mentoring, not formal financial advice",
-            "• Recommend professional consultation for complex tax/legal matters",
-            "• If uncertain about industry specifics, say so and ask questions",
-            "• Challenge unrealistic goals with data and experience",
-            
-            "\nRespond as their trusted business mentor with that steady, experienced tone:"
-        ])
-        
-        return "\n".join(context_parts)
+        "\nRespond briefly as their business mentor:"
+    ])
+    
+    return "\n".join(context_parts)
     
     @staticmethod
     def store_conversation(db: Session, user_id: int, user_message: str, ai_response: str, message_type: str = "general"):
